@@ -1,0 +1,125 @@
+// Handle PDF generation with red stamp
+document.getElementById('printPdfButton').addEventListener('click', function() {
+    // Disable button during generation
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération en cours...';
+    
+    // Create a deep clone of the content
+    const element = document.getElementById('contentToPrint');
+    const clone = element.cloneNode(true);
+    
+    // Remove the print button from clone
+    const printBtnClone = clone.querySelector('#printPdfButton');
+    if (printBtnClone) printBtnClone.remove();
+    
+    // If form exists in clone (order not yet confirmed)
+    const formClone = clone.querySelector('.customer-form');
+    if (formClone) {
+        // Get current form values
+        const formData = {
+            nom: document.getElementById('nom')?.value || '',
+            prenom: document.getElementById('prenom')?.value || '',
+            email: document.getElementById('email')?.value || '',
+            adresse: document.getElementById('adresse')?.value || '',
+            telephone: document.getElementById('telephone')?.value || ''
+        };
+        
+        // Create customer info HTML
+        const customerInfoHTML = `
+            <div class="customer-info-display">
+                <h2>Informations client</h2>
+                <p><strong>Nom:</strong> ${formData.nom}</p>
+                <p><strong>Prénom:</strong> ${formData.prenom}</p>
+                <p><strong>Email:</strong> ${formData.email}</p>
+                <p><strong>Adresse:</strong> ${formData.adresse.replace(/\n/g, '<br>')}</p>
+                <p><strong>Téléphone:</strong> ${formData.telephone}</p>
+                <p><strong>Date d'impression:</strong> ${new Date().toLocaleDateString('fr-FR')} ${new Date().toLocaleTimeString('fr-FR')}</p>
+            </div>
+            <br>
+            <div> </div>
+            <br><br><br>    
+            <center> 
+                <h2 style="display: inline-block; 
+                    color: red; 
+                    border: 2px solid red; 
+                    padding: 5px 15px; 
+                    margin: 10px 0;
+                    font-weight: normal;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;">
+                    Confirmed
+                </h2>
+                <br><br><br><br><br><br>    
+                <p>Merci pour votre commande !</p>
+            </center>
+        `;
+        
+        // Replace form with customer info
+        formClone.outerHTML = customerInfoHTML;
+    }
+    
+    // PDF options
+    const options = {
+        margin: [15, 15, 15, 15], // Top, Right, Bottom, Left (in mm)
+        filename: `facture_${new Date().toISOString().slice(0,10)}.pdf`,
+        image: { 
+            type: 'jpeg', 
+            quality: 0.98 
+        },
+        html2canvas: { 
+            scale: 2,
+            scrollY: 0,
+            useCORS: true,
+            allowTaint: true,
+            letterRendering: true
+        },
+        jsPDF: { 
+            unit: 'mm', 
+            format: 'a4',
+            orientation: 'portrait'
+        }
+    };
+    
+    // Generate PDF
+    html2pdf()
+        .from(clone)
+        .set(options)
+        .toPdf()
+        .get('pdf')
+        .then(function(pdf) {
+            // 1. Télécharger le PDF pour l'utilisateur
+            pdf.save(options.filename);
+            
+            // 2. Envoyer le PDF au serveur pour sauvegarde
+            const blob = pdf.output('blob');
+            const formData = new FormData();
+            formData.append('pdf_file', blob, options.filename);
+            
+            // Envoyer le PDF au serveur
+            fetch('save_pdf.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Erreur serveur');
+                return response.text();
+            })
+            .then(() => {
+                showToast('PDF généré et enregistré avec succès!', 'success');
+            })
+            .catch(error => {
+                console.error('Erreur enregistrement PDF:', error);
+                showToast('PDF généré mais erreur lors de l\'enregistrement', 'error');
+            });
+        })
+        .catch(err => {
+            console.error('Erreur génération PDF:', err);
+            showToast('Erreur lors de la génération du PDF', 'error');
+        })
+        .finally(() => {
+            // Re-enable button
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-file-pdf"></i> Imprimer facture PDF';
+        });
+});
